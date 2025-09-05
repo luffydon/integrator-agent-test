@@ -1,0 +1,119 @@
+name: Stage B — Promote to Prod (change-aware)
+
+on:
+  push:
+    branches: [ "main" ]       # your true base branch
+    tags:     [ "release/**" ]
+
+jobs:
+  stage-b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL:   ${{ secrets.DATABASE_URL_PROD }}
+      PROD_HEALTH_URL:${{ secrets.PROD_HEALTH_URL }}
+      FLY_API_TOKEN:  ${{ secrets.FLY_API_TOKEN_PROD }}
+
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes (DB vs Fly)
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            db:
+              - 'alembic/**'
+              - 'migrations/**'
+              - 'db/migrations/**'
+              - 'schema/**'
+              - '**/*.sql'
+            fly:
+              - 'fly.prod.toml'
+              - 'Dockerfile'
+              - 'Procfile'
+              - 'docker/**'
+              - 'app/**'
+              - 'src/**'
+              - 'services/**'
+              - 'server/**'
+              - 'pyproject.toml'
+              - 'requirements.txt'
+
+      - name: Nothing to do
+        if: steps.changes.outputs.db == 'false' && steps.changes.outputs.fly == 'false'
+        run: echo "No DB or Fly changes detected."
+
+      - name: Setup Python
+        if: steps.changes.outputs.db == 'true' || steps.changes.outputs.fly == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tooling
+        if: steps.changes.outputs.db == 'true' || steps.changes.outputs.fly == 'true'
+        run: |
+          pip install --no-cache-dir -r requirements.txt || true
+          pip install --no-cache-dir alembic httpx
+          sudo apt-get update && sudo apt-get install -y postgresql-client jq
+
+      - name: DB backup (logical)
+        if: steps.changes.outputs.db == 'true' && env.DATABASE_URL != ''
+        run: |
+          echo "Creating DB backup (logical dump)"
+          pg_dump "$DATABASE_URL" --no-owner --no-privileges -F c -f backup.dump
+
+      - name: DB migrate (prod)
+        if: steps.changes.outputs.db == 'true' && env.DATABASE_URL != ''
+        run: |
+          echo "Running alembic upgrade head on PROD"
+          alembic upgrade head
+
+      - name: Setup Flyctl
+        if: steps.changes.outputs.fly == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly PROD
+        if: steps.changes.outputs.fly == 'true' && env.FLY_API_TOKEN != ''
+        env:
+          FLY_API_TOKEN: ${{ env.FLY_API_TOKEN }}
+        run: |
+          if [ -f fly.prod.toml ]; then
+            flyctl deploy --config fly.prod.toml --remote-only
+          else
+            flyctl deploy --remote-only
+
+      - name: Health check (prod)
+        if: steps.changes.outputs.fly == 'true' && env.PROD_HEALTH_URL != ''
+        env:
+          PROD_HEALTH_URL: ${{ env.PROD_HEALTH_URL }}
+        run: |
+          echo "Probing $PROD_HEALTH_URL"
+          for i in {1..10}; do
+            curl -fsS "$PROD_HEALTH_URL" && exit 0
+            echo "Health attempt $i failed; sleeping..."; sleep 5
+          done
+          echo "Health probe failed"; exit 1
+
+      - name: Rollback on failure (Fly image)
+        if: failure() && steps.changes.outputs.fly == 'true'
+        env:
+          FLY_API_TOKEN: ${{ env.FLY_API_TOKEN }}
+        run: |
+          echo "Attempting Fly rollback to previous release"
+          APP_NAME=$(grep -m1 '^app\\s*=\\s*' fly.prod.toml 2>/dev/null | sed -E 's/app\\s*=\\s*\"?([^\" ]+)\"?/\\1/') || true
+          if [ -z "$APP_NAME" ]; then
+            echo "Could not determine app name from fly.prod.toml; skipping rollback"
+            exit 0
+          fi
+          PREV_IMAGE=$(flyctl releases -a "$APP_NAME" --json | jq -r '.[1].image_ref')
+          if [ "$PREV_IMAGE" = "null" ] || [ -z "$PREV_IMAGE" ]; then
+            echo "No previous image found; skipping rollback"
+            exit 0
+          fi
+          echo "Redeploying previous image: $PREV_IMAGE"
+          flyctl deploy --image "$PREV_IMAGE" --remote-only
