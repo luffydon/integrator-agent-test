@@ -1,0 +1,1 @@
+from app.integrator.branch_pusher import normalize_path, encode_contents_path, PushError\nimport pytest\n\ndef test_normalize_ok():\n    assert normalize_path('dir/sub/file.txt') == 'dir/sub/file.txt'\n\n@pytest.mark.parametrize('bad',['../secret',''])\ndef test_normalize_bad(bad):\n    with pytest.raises(PushError):\n        normalize_path(bad)\n

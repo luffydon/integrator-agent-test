@@ -1,0 +1,16 @@
+{
+  "weights": {
+    "handle_inline": 0.9,
+    "alias_strong": 0.55,
+    "alias_weak": 0.3,
+    "lang_synonym": 0.1,
+    "entity_fit": 0.1,
+    "negation": -0.4,
+    "conflict": -0.25
+  },
+  "thresholds": {
+    "route_strong": 0.9,
+    "route_candidate_low": 0.6,
+    "route_candidate_high": 0.89
+  }
+}

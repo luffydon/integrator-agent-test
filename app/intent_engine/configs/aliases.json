@@ -1,0 +1,190 @@
+{
+  "food": {
+    "strong": [
+      "food",
+      "eat",
+      "restaurant",
+      "menu",
+      "delivery",
+      "order",
+      "еда",
+      "ресторан",
+      "меню",
+      "доставка",
+      "заказать",
+      "đồ ăn",
+      "thức ăn",
+      "nhà hàng",
+      "thực đơn",
+      "giao hàng",
+      "đặt",
+      "Essen",
+      "Restaurant",
+      "Menü",
+      "Lieferung",
+      "bestellen",
+      "음식",
+      "식당",
+      "메뉴",
+      "배달",
+      "주문"
+    ],
+    "weak": [
+      "sushi",
+      "pizza",
+      "burger",
+      "pho",
+      "ramen",
+      "döner",
+      "kebab",
+      "noodles",
+      "kimchi",
+      "bibimbap"
+    ]
+  },
+  "real_estate": {
+    "strong": [
+      "apartment",
+      "flat",
+      "house",
+      "rent",
+      "lease",
+      "real estate",
+      "квартира",
+      "жилье",
+      "аренда",
+      "недвижимость",
+      "căn hộ",
+      "nhà",
+      "thuê",
+      "bất động sản",
+      "Wohnung",
+      "Haus",
+      "mieten",
+      "Immobilie",
+      "부동산",
+      "아파트",
+      "집",
+      "임대"
+    ],
+    "weak": [
+      "studio",
+      "2br",
+      "loft",
+      "deposit",
+      "short term",
+      "long term",
+      "furnished"
+    ]
+  },
+  "business": {
+    "strong": [
+      "service",
+      "category",
+      "listing",
+      "услуги",
+      "категории",
+      "dịch vụ",
+      "danh mục",
+      "Dienstleistung",
+      "Kategorie",
+      "서비스",
+      "카테고리"
+    ],
+    "weak": [
+      "plumber",
+      "barber",
+      "salon",
+      "cleaning",
+      "repair",
+      "beauty",
+      "nail",
+      "spa"
+    ]
+  },
+  "transportation": {
+    "strong": [
+      "taxi",
+      "ride",
+      "car",
+      "uber",
+      "grab",
+      "bolt",
+      "airport",
+      "train",
+      "bus",
+      "перевозка",
+      "такси",
+      "поезд",
+      "автобус",
+      "xe",
+      "taxi",
+      "tàu",
+      "xe buýt",
+      "Flughafen",
+      "Zug",
+      "Bus",
+      "택시",
+      "차",
+      "기차",
+      "버스"
+    ],
+    "weak": [
+      "pickup",
+      "dropoff",
+      "ETA",
+      "fare",
+      "transfer",
+      "station",
+      "terminal"
+    ]
+  },
+  "surf": {
+    "strong": [
+      "surf",
+      "surfing",
+      "waves",
+      "swell",
+      "tide",
+      "board",
+      "wetsuit",
+      "серфинг",
+      "волны",
+      "lướt sóng",
+      "sóng",
+      "thủy triều",
+      "Wellen",
+      "Brandung",
+      "Gezeiten",
+      "서핑",
+      "파도",
+      "조수"
+    ],
+    "weak": [
+      "spot",
+      "reef",
+      "beach",
+      "forecast",
+      "rent board",
+      "rent wetsuit",
+      "longboard",
+      "shortboard"
+    ]
+  },
+  "tools": {
+    "strong": [
+      "search",
+      "google",
+      "web search",
+      "github",
+      "repo",
+      "clone",
+      "поиск",
+      "гугл",
+      "tìm kiếm",
+      "Suche",
+      "웹검색",
+      "깃허브"
+    ]
+  }
+}

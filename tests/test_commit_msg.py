@@ -1,0 +1,1 @@
+from app.integrator.branch_pusher import _sanitize_commit_message\n\ndef test_commit_sanitization():\n    s=_sanitize_commit_message('Hello\tWorld\nTest')\n    assert ' ' in s and len(s)<=120\n    assert _sanitize_commit_message('')=='Stage A update'\n

@@ -1,0 +1,10 @@
+services:
+  # This is your main application router
+  router:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/usr/src/app
+    env_file:
+      - .env

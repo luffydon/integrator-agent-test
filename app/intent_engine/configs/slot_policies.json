@@ -1,0 +1,52 @@
+{
+  "food": {
+    "list": [],
+    "delivery": [
+      "time?"
+    ],
+    "visit": [],
+    "book": [
+      "mode",
+      "restaurant_id"
+    ]
+  },
+  "real_estate": {
+    "search": [
+      "city",
+      "term"
+    ],
+    "ask_info": []
+  },
+  "business": {
+    "list": [
+      "category?",
+      "location?"
+    ],
+    "discover": [
+      "category?",
+      "location?"
+    ]
+  },
+  "transportation": {
+    "estimate": [
+      "from",
+      "to"
+    ],
+    "book": [
+      "from",
+      "to",
+      "time"
+    ],
+    "list": []
+  },
+  "surf": {
+    "list": [
+      "location?",
+      "item?"
+    ],
+    "book": [
+      "location",
+      "service_id"
+    ]
+  }
+}

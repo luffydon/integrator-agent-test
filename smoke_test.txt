@@ -1,0 +1,19 @@
+SMOKE TEST (local, no Telegram)
+
+1) Start server:
+   uvicorn app.main:app --reload --port 8080
+
+2) Health:
+   curl -s localhost:8080/health
+
+3) Food path:
+   curl -s -X POST localhost:8080/route -H 'content-type: application/json' -d '{"user_id":"u1","message":"I want food"}'
+   curl -s -X POST localhost:8080/route -H 'content-type: application/json' -d '{"user_id":"u1","message":"1"}'
+   curl -s -X POST localhost:8080/route -H 'content-type: application/json' -d '{"user_id":"u1","message":"Get Delivery"}'
+   curl -s -X POST localhost:8080/route -H 'content-type: application/json' -d '{"user_id":"u1","message":"later today 7pm"}'
+
+4) Real estate path:
+   curl -s -X POST localhost:8080/route -H 'content-type: application/json' -d '{"user_id":"u2","message":"I want to rent a flat for 6 months"}'
+
+5) Telegram (optional):
+   Set TELEGRAM_BOT_TOKEN and configure your bot webhook to http(s)://<host>/telegram/webhook

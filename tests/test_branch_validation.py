@@ -1,0 +1,1 @@
+from app.integrator.branch_pusher import validate_branch_name, BranchCreateError\nimport pytest\n\n@pytest.mark.parametrize('name', ['feature/x','rel-1','a'])\ndef test_valid(name):\n    validate_branch_name(name)\n\n@pytest.mark.parametrize('name', ['', '..','bad..name'])\ndef test_invalid(name):\n    with pytest.raises(BranchCreateError):\n        validate_branch_name(name)\n

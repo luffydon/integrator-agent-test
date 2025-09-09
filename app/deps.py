@@ -1,0 +1,3 @@
+import os
+GLOBAL_PROMO_CODE = os.getenv("GLOBAL_PROMO_CODE")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
