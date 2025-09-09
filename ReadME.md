@@ -10,3 +10,5 @@ OPENROUTER_API_KEY=...
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
 SERVICE_API_BASE=https://<your-backend>.fly.dev
 APP_SECRET_KEY=<same-as-backend>
+
+test
