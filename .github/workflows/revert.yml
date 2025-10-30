@@ -1,0 +1,94 @@
+name: Revert — Roll back last deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_prod:
+        description: "Deploy previous Fly image to PROD"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  revert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+      FLY_APP: ${{ vars.FLY_APP }}
+      PROD_HEALTH_URL: ${{ secrets.PROD_HEALTH_URL }}
+
+    steps:
+      - name: Checkout (no code changes needed)
+        uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Ensure jq
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+      - name: Setup Flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Resolve app name
+        id: app
+        run: |
+          if [ -n "${FLY_APP}" ]; then
+            echo "app=${FLY_APP}" >> "$GITHUB_OUTPUT"
+          elif [ -f fly.prod.toml ]; then
+            app=$(grep -m1 '^app\s*=\s*' fly.prod.toml | sed -E 's/app\s*=\s*\"?([^\" ]+)\"?/\1/')
+            echo "app=${app}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::No FLY_APP var and no fly.prod.toml found"; exit 1
+          fi
+          echo "App: $(cat $GITHUB_OUTPUT)"
+
+      - name: Lookup previous Fly image
+        id: prev
+        env:
+          APP: ${{ steps.app.outputs.app }}
+        run: |
+          set -e
+          json=$(flyctl releases -a "$APP" --json)
+          count=$(echo "$json" | jq 'length')
+          if [ "$count" -lt 2 ]; then
+            echo "::error::No previous release to roll back to"; exit 1
+          fi
+          image=$(echo "$json" | jq -r '.[1].image_ref')
+          if [ -z "$image" ] || [ "$image" = "null" ]; then
+            echo "::error::No previous image_ref found"; exit 1
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "prev_version=$(echo "$json" | jq -r '.[1].version')" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy previous image
+        if: ${{ inputs.deploy_prod == true }}
+        env:
+          APP: ${{ steps.app.outputs.app }}
+          IMAGE: ${{ steps.prev.outputs.image }}
+        run: |
+          set -e
+          flyctl deploy --image "$IMAGE" -a "$APP" --remote-only
+
+      - name: Health check (prod)
+        if: ${{ inputs.deploy_prod == true }}
+        run: |
+          if [ -z "$PROD_HEALTH_URL" ]; then
+            echo "No PROD_HEALTH_URL; skipping health check"; exit 0
+          fi
+          for i in {1..12}; do
+            if curl -fsS "$PROD_HEALTH_URL" > /dev/null; then
+              echo "Prod healthy"; exit 0
+            fi
+            echo "Attempt $i failed; sleep 5s"; sleep 5
+          done
+          echo "::error::Prod health failed"; exit 1
+
+      - name: Summary
+        run: |
+          echo "Reverted to Fly image: ${{ steps.prev.outputs.image }}" >> $GITHUB_STEP_SUMMARY
+          echo "Previous release version: ${{ steps.prev.outputs.prev_version }}" >> $GITHUB_STEP_SUMMARY
