@@ -1,0 +1,168 @@
+name: Revert by Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Stage-A branch to revert (e.g., stage-a/20251103-wave-house)"
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: revert-by-branch-${{ inputs.branch }}
+  cancel-in-progress: false
+
+jobs:
+  revert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Guard — branch format
+        run: |
+          set -e
+          BR="${{ inputs.branch }}"
+          if ! echo "$BR" | grep -Eq '^stage-a/[a-z0-9._/-]{1,80}$'; then
+            echo "::error::Invalid branch. Expect stage-a/<slug>"; exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Ensure jq
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+      - name: Meta
+        id: meta
+        run: |
+          REPO="${REPO}"
+          OWNER="${REPO%%/*}"
+          NAME="${REPO##*/}"
+          DEF="${DEFAULT_BRANCH:-main}"
+          echo "owner=$OWNER" >> $GITHUB_OUTPUT
+          echo "name=$NAME"   >> $GITHUB_OUTPUT
+          echo "def=$DEF"     >> $GITHUB_OUTPUT
+
+      - name: Find merged PR (primary)
+        id: find_pr_primary
+        env:
+          OWNER: ${{ steps.meta.outputs.owner }}
+          NAME:  ${{ steps.meta.outputs.name }}
+        run: |
+          set -e
+          BR="${{ inputs.branch }}"
+          URL="https://api.github.com/repos/${OWNER}/${NAME}/pulls?state=closed&head=${OWNER}:${BR}&per_page=10"
+          RESP=$(curl -fsSL             -H "Authorization: Bearer $GITHUB_TOKEN"             -H "Accept: application/vnd.github+json"             "$URL")
+          MERGED=$(echo "$RESP" | jq '[.[] | select(.merged_at != null)] | sort_by(.merged_at) | reverse | .[0]')
+          if [ "$MERGED" = "null" ] || [ -z "$MERGED" ]; then
+            echo "found=false" >> $GITHUB_OUTPUT; exit 0
+          fi
+          echo "found=true" >> $GITHUB_OUTPUT
+          echo "number=$(echo "$MERGED" | jq -r '.number')" >> $GITHUB_OUTPUT
+          echo "sha=$(echo "$MERGED" | jq -r '.merge_commit_sha')" >> $GITHUB_OUTPUT
+          echo "title=$(echo "$MERGED" | jq -r '.title')" >> $GITHUB_OUTPUT
+
+      - name: Find merged PR (fallback)
+        if: steps.find_pr_primary.outputs.found != 'true'
+        id: find_pr_fallback
+        env:
+          OWNER: ${{ steps.meta.outputs.owner }}
+          NAME:  ${{ steps.meta.outputs.name }}
+        run: |
+          set -e
+          BR="${{ inputs.branch }}"
+          Q="repo:${OWNER}/${NAME}+is:pr+is:merged+head:${BR}"
+          URL="https://api.github.com/search/issues?q=$(echo "$Q" | sed 's/ /+/g')&sort=updated&order=desc&per_page=1"
+          RESP=$(curl -fsSL             -H "Authorization: Bearer $GITHUB_TOKEN"             -H "Accept: application/vnd.github+json"             "$URL")
+          NUM=$(echo "$RESP" | jq -r '.items[0].number')
+          if [ -z "$NUM" ] || [ "$NUM" = "null" ]; then
+            echo "::error::No merged PR found for branch ${BR}"; exit 1
+          fi
+          PR=$(curl -fsSL             -H "Authorization: Bearer $GITHUB_TOKEN"             -H "Accept: application/vnd.github+json"             "https://api.github.com/repos/${OWNER}/${NAME}/pulls/${NUM}")
+          echo "number=$NUM"                                   >> $GITHUB_OUTPUT
+          echo "sha=$(echo "$PR" | jq -r '.merge_commit_sha')" >> $GITHUB_OUTPUT
+          echo "title=$(echo "$PR" | jq -r '.title')"          >> $GITHUB_OUTPUT
+
+      - name: Choose PR meta
+        id: pr
+        run: |
+          if [ "${{ steps.find_pr_primary.outputs.found }}" = "true" ]; then
+            echo "number=${{ steps.find_pr_primary.outputs.number }}" >> $GITHUB_OUTPUT
+            echo "sha=${{ steps.find_pr_primary.outputs.sha }}"       >> $GITHUB_OUTPUT
+            echo "title=${{ steps.find_pr_primary.outputs.title }}"   >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ steps.find_pr_fallback.outputs.number }}" >> $GITHUB_OUTPUT
+            echo "sha=${{ steps.find_pr_fallback.outputs.sha }}"       >> $GITHUB_OUTPUT
+            echo "title=${{ steps.find_pr_fallback.outputs.title }}"   >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create revert branch
+        id: new_branch
+        env: { DEF: ${{ steps.meta.outputs.def }} }
+        run: |
+          set -e
+          BR_SLUG=$(echo "${{ inputs.branch }}" | sed 's#[^a-zA-Z0-9._-]#-#g')
+          RB="revert/${BR_SLUG}/${GITHUB_RUN_ID}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout "$DEF"
+          git pull --ff-only
+          git checkout -b "$RB"
+          echo "name=$RB" >> $GITHUB_OUTPUT
+
+      - name: Revert commit (merge-aware)
+        id: do_revert
+        continue-on-error: true
+        run: |
+          set +e
+          SHA="${{ steps.pr.outputs.sha }}"
+          PARENTS=$(git rev-list --parents -n 1 "$SHA")
+          CNT=$(echo "$PARENTS" | wc -w)
+          if [ "$CNT" -ge 3 ]; then git revert -m 1 "$SHA" --no-edit; else git revert "$SHA" --no-edit; fi
+          echo "code=$?" >> $GITHUB_OUTPUT; exit 0
+
+      - name: Handle conflicts
+        if: steps.do_revert.outputs.code != '0'
+        run: |
+          mkdir -p ops/revert-by-branch/CONFLICTS
+          echo "# Manual revert needed for ${{ steps.pr.outputs.sha }}" > ops/revert-by-branch/CONFLICTS/${{ steps.pr.outputs.sha }}.md
+          git add ops/revert-by-branch/CONFLICTS/${{ steps.pr.outputs.sha }}.md
+          git commit -m "chore(revert): mark manual resolution for ${{ steps.pr.outputs.sha }}"
+
+      - name: Push branch
+        run: git push --set-upstream origin "${{ steps.new_branch.outputs.name }}"
+
+      - name: Open PR
+        id: open_pr
+        env:
+          OWNER: ${{ steps.meta.outputs.owner }}
+          NAME:  ${{ steps.meta.outputs.name }}
+          DEF:   ${{ steps.meta.outputs.def }}
+        run: |
+          TITLE="Revert: #${{ steps.pr.outputs.number }} — ${{ steps.pr.outputs.title }}"
+          BODY=$(jq -Rs . <<'EOT'
+          This PR reverts the promotion introduced by the Stage-A branch.
+
+          - Original PR: #${{ steps.pr.outputs.number }}
+          - Merge commit: `${{ steps.pr.outputs.sha }}`
+          EOT
+          )
+          DATA="{"title":$BODY,"head":"${{ steps.new_branch.outputs.name }}","base":"$DEF","body":$BODY}"
+          RESP=$(curl -fsSL -X POST             -H "Authorization: Bearer $GITHUB_TOKEN"             -H "Accept: application/vnd.github+json"             -d "$DATA" "https://api.github.com/repos/${OWNER}/${NAME}/pulls")
+          echo "url=$(echo "$RESP" | jq -r '.html_url')"  >> $GITHUB_OUTPUT
+          echo "number=$(echo "$RESP" | jq -r '.number')" >> $GITHUB_OUTPUT
+
+      - name: Summary
+        run: |
+          echo "Revert PR: ${{ steps.open_pr.outputs.url }}" >> $GITHUB_STEP_SUMMARY
